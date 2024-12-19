@@ -85,3 +85,89 @@ func Keccak256(input string) string {
 func Hash(input string) string {
 	return Keccak256(input)
 }
+
+func (am *AccountManager) setAccountFromDict(keystore map[string]interface{}, password string) error {
+	privateKey, err := am.ethClient.AccountDecrypt(keystore, password)
+	if err != nil {
+		return err
+	}
+	am.account = am.ethClient.AccountPrivateKeyToAccount(privateKey)
+	return nil
+}
+
+func (am *AccountManager) setAccountFromFile(filename, password string) error {
+	keystoreFile, err := os.Open(filename)
+	if err != nil {
+		log.Printf("File not found: %v", err)
+		return err
+	}
+	defer keystoreFile.Close()
+
+	var keystore map[string]interface{}
+	if err := json.NewDecoder(keystoreFile).Decode(&keystore); err != nil {
+		return err
+	}
+	return am.setAccountFromDict(keystore, password)
+}
+
+func (am *AccountManager) setHttpProvidersFromFile(httpProvidersFile string) error {
+	if httpProvidersFile == "" {
+		return fmt.Errorf("httpProvidersFile cannot be empty")
+	}
+
+	providersFile, err := ioutil.ReadFile(httpProvidersFile)
+	if err != nil {
+		return err
+	}
+
+	var data map[string]interface{}
+	if err := json.Unmarshal(providersFile, &data); err != nil {
+		return err
+	}
+
+	if nodes, ok := data["nodes"].([]interface{}); ok {
+		for _, node := range nodes {
+			if nodeStr, ok := node.(string); ok {
+				am.httpProviders = append(am.httpProviders, nodeStr)
+			}
+		}
+	}
+	return nil
+}
+
+func (am *AccountManager) nextHttpProvider() error {
+	am.httpProviderIndex = (am.httpProviderIndex + 1) % len(am.httpProviders)
+	httpProvider := am.httpProviders[am.httpProviderIndex]
+	if err := am.setHttpProvider(httpProvider); err != nil {
+		return am.nextHttpProvider()
+	}
+	return nil
+}
+
+func (am *AccountManager) getTx(to common.Address, value uint64, data []byte, nonce uint64, gas uint64, gasPrice uint64, gasPriceMultiplier float64, pending bool) (map[string]interface{}, error) {
+	if value == 0 {
+		value = 0
+	}
+
+	if nonce == 0 {
+		nonce, err := am.getNonce(pending)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	tx := map[string]interface{}{
+		"from": am.account.Address,
+		"to":   to,
+		"nonce": nonce,
+		"value": value,
+	}
+
+	if data != nil {
+		tx["data"] = data
+	}
+
+	am.updateTxDictGasParams(tx, gas, gasPrice, gasPriceMultiplier)
+
+	return tx, nil
+}
