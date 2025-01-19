@@ -1,8 +1,14 @@
 package easyweb3
 
 import (
+	"context"
 	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"io/ioutil"
+	"log"
 	"math/big"
+	"os"
 
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/common"
@@ -13,6 +19,14 @@ import (
 // EasyWeb3 represents the main struct for Ethereum interactions
 type EasyWeb3 struct {
 	client *ethclient.Client
+}
+
+// AccountManager handles Ethereum account operations
+type AccountManager struct {
+	ethClient         *ethclient.Client
+	account           *accounts.Account
+	httpProviders     []string
+	httpProviderIndex int
 }
 
 const (
@@ -149,17 +163,22 @@ func (am *AccountManager) getTx(to common.Address, value uint64, data []byte, no
 		value = 0
 	}
 
+	var txNonce uint64
+	var err error
+
 	if nonce == 0 {
-		nonce, err := am.getNonce(pending)
+		txNonce, err = am.getNonce(pending)
 		if err != nil {
 			return nil, err
 		}
+	} else {
+		txNonce = nonce
 	}
 
 	tx := map[string]interface{}{
-		"from": am.account.Address,
-		"to":   to,
-		"nonce": nonce,
+		"from":  am.account.Address,
+		"to":    to,
+		"nonce": txNonce,
 		"value": value,
 	}
 
@@ -170,4 +189,47 @@ func (am *AccountManager) getTx(to common.Address, value uint64, data []byte, no
 	am.updateTxDictGasParams(tx, gas, gasPrice, gasPriceMultiplier)
 
 	return tx, nil
+}
+
+// NewAccountManager creates a new AccountManager instance
+func NewAccountManager(provider string) (*AccountManager, error) {
+	client, err := ethclient.Dial(provider)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to Ethereum client: %v", err)
+	}
+
+	return &AccountManager{
+		ethClient:         client,
+		httpProviders:     []string{provider},
+		httpProviderIndex: 0,
+	}, nil
+}
+
+// setHttpProvider sets up a connection to the specified HTTP provider
+func (am *AccountManager) setHttpProvider(provider string) error {
+	client, err := ethclient.Dial(provider)
+	if err != nil {
+		return fmt.Errorf("failed to connect to provider %s: %v", provider, err)
+	}
+	am.ethClient = client
+	return nil
+}
+
+// getNonce gets the next nonce for the account
+func (am *AccountManager) getNonce(pending bool) (uint64, error) {
+	if pending {
+		return am.ethClient.PendingNonceAt(context.Background(), am.account.Address)
+	}
+	return am.ethClient.NonceAt(context.Background(), am.account.Address, nil)
+}
+
+// updateTxDictGasParams updates the transaction parameters related to gas
+func (am *AccountManager) updateTxDictGasParams(tx map[string]interface{}, gas uint64, gasPrice uint64, gasPriceMultiplier float64) {
+	if gas > 0 {
+		tx["gas"] = gas
+	}
+	if gasPrice > 0 {
+		finalGasPrice := float64(gasPrice) * gasPriceMultiplier
+		tx["gasPrice"] = uint64(finalGasPrice)
+	}
 }
