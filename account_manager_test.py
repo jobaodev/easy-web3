@@ -1,10 +1,16 @@
 import unittest
 from unittest.mock import patch, mock_open
 import json
+from account_manager import AccountManager
+
 
 class TestAccountManager(unittest.TestCase):
 
-    @patch("builtins.open", new_callable=mock_open, read_data='{"nodes": ["http://node1", "http://node2"]}')
+    @patch(
+        "builtins.open",
+        new_callable=mock_open,
+        read_data='{"nodes": ["http://node1", "http://node2"]}',
+    )
     def test_setHttpProvidersFromFile_valid_file(self, mock_file):
         am = AccountManager()
         am.setHttpProvidersFromFile("httpProviders.json")
@@ -16,7 +22,7 @@ class TestAccountManager(unittest.TestCase):
         am.setHttpProvidersFromFile("httpProviders.json")
         self.assertEqual(am.httpProviders, [])
 
-    @patch("builtins.open", new_callable=mock_open, read_data='invalid json')
+    @patch("builtins.open", new_callable=mock_open, read_data="invalid json")
     def test_setHttpProvidersFromFile_invalid_json(self, mock_file):
         am = AccountManager()
         with self.assertRaises(ValueError):
@@ -47,12 +53,7 @@ class TestAccountManager(unittest.TestCase):
     def test_getTx_minimal_params(self):
         am = AccountManager()
         tx = am.getTx(to="0x456")
-        expected = {
-            "from": "0x123",
-            "to": "0x456",
-            "nonce": 1,
-            "value": 0
-        }
+        expected = {"from": "0x123", "to": "0x456", "nonce": 1, "value": 0}
         self.assertEqual(tx, expected)
 
     def test_getTx_with_data(self):
@@ -63,7 +64,7 @@ class TestAccountManager(unittest.TestCase):
             "to": "0x456",
             "nonce": 5,
             "value": 0,
-            "data": b"test_data"
+            "data": b"test_data",
         }
         self.assertEqual(tx, expected)
 
