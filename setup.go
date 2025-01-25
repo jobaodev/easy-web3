@@ -3,7 +3,6 @@ package easyweb3
 import (
 	"fmt"
 	"log"
-	"os"
 	"runtime"
 )
 
